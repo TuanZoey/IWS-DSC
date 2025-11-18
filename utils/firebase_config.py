@@ -1,47 +1,25 @@
-# In file: utils/firebase_config.py
-
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# --- Define Collection Names (as used in your app.py) ---
-USERS_COLLECTION = "users"
+# Define collection names
 TASKS_COLLECTION = "tasks"
-COMPLIANCE_COLLECTION = "compliance_reports"
-NOTIFICATIONS_COLLECTION = "notifications"
+USERS_COLLECTION = "users"
 COUNTERS_COLLECTION = "counters"
+NOTIFICATIONS_COLLECTION = "notifications"
+COMPLIANCE_COLLECTION = "compliance_reports"
 
-@st.cache_resource
-def get_db():
-    """
-    Initializes and returns the Firebase Admin SDK app and Firestore client.
-    Uses @st.cache_resource to connect only once.
-    """
+# Connect to Firebase
+# We check if the app is already initialized to prevent errors on app rerun
+if not firebase_admin._apps:
     try:
-        # Check if app is already initialized
-        if not firebase_admin._apps:
-            # --- IMPORTANT ---
-            # Change "service-account.json" to the name of your key file
-            cred_path = "service-account.json" 
-            
-            cred = credentials.Certificate(cred_path)
-            firebase_admin.initialize_app(cred)
-            print("Firebase App Initialized.")
-        
-        # Return the firestore client
-        return firestore.client()
-        
-    except FileNotFoundError:
-        st.error(f"FATAL ERROR: Firebase service account key not found.")
-        st.error(f"The file '{cred_path}' is missing.")
-        st.stop()
+        # ---------------------------------------------------------
+        # THIS IS THE FIX: Load from Streamlit Secrets, not a file
+        # ---------------------------------------------------------
+        key_dict = dict(st.secrets["firebase"])
+        cred = credentials.Certificate(key_dict)
+        firebase_admin.initialize_app(cred)
     except Exception as e:
-        st.error(f"Error initializing Firebase: {e}")
-        st.stop()
+        st.error(f"Failed to initialize Firebase: {e}")
 
-# Initialize the database
-try:
-    db = get_db()
-except Exception as e:
-    db = None
-    st.error(f"Failed to connect to Firestore: {e}")
+db = firestore.client()
