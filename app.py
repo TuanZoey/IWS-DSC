@@ -7,25 +7,23 @@ import plotly.graph_objects as go
 from utils.firebase_config import db, USERS_COLLECTION, TASKS_COLLECTION
 from utils.auth import authenticate_user, initialize_sample_users
 
-# --- NEW BLOCK 1: Imports for PDF Generation ---
+# Imports for PDF Generation 
 from fpdf import FPDF
-# --- END OF NEW BLOCK 1 ---
 
-# --- NEW BLOCK 2: Imports for New Features (WO Counter & Findings) ---
-from firebase_admin import firestore # For atomic increments
+# Imports WO Counter Findings
+from firebase_admin import firestore 
 import re
 from collections import Counter
-# --- END OF NEW BLOCK ---
 
-# --- NEW BLOCK 3: New Collection Definitions ---
-# These are the names of the new Firebase collections
+
+# Firebase_collection
 COMPLIANCE_COLLECTION = "compliance_reports"
 NOTIFICATIONS_COLLECTION = "notifications"
-COUNTERS_COLLECTION = "counters" # For Request 1 (WO Number)
-# --- END OF NEW BLOCK ---
+COUNTERS_COLLECTION = "counters" 
 
 
-# Page configuration
+
+# Page 
 st.set_page_config(
     page_title="IWA-DCS",
     page_icon="🏭",
@@ -33,7 +31,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Location Configuration ---
+# Location
 LOCATION_MAP = {
     'TGAST': 'Onshore',
     'TCOT': 'Onshore',
@@ -42,9 +40,8 @@ LOCATION_MAP = {
 }
 ALL_LOCATIONS = list(LOCATION_MAP.keys())
 
-# --- NEW BLOCK 4: Definitions for Form Changes ---
 
-# --- REQUIREMENT 2: Re-instating Duration Mappings ---
+# Duration based on worktype
 ELECTRICAL_DURATIONS = {
     "Preventive Maintenance": 4, 
     "Corrective Maintenance": 8, 
@@ -71,11 +68,11 @@ INSTRUMENT_DURATIONS = {
     "Default": 3
 }
 
-# Helper lists for form selectboxes
+# lists for form selectboxes
 ELEC_WORK_TYPES = list(ELECTRICAL_DURATIONS.keys())
 MECH_WORK_TYPES = list(MECHANICAL_DURATIONS.keys())
 INST_WORK_TYPES = list(INSTRUMENT_DURATIONS.keys())
-# --- END REQUIREMENT 2 ---
+
 
 
 # Standard Safety Checks
@@ -98,10 +95,8 @@ STOP_WORDS = set([
     'equipment', 'work', 'task', 'see', 'check', 'checked', 'also', 'has', 'had', 'per',
     'need', 'replace', 'repair', 'broken', 'faulty', 'damage', 'damaged'
 ])
-# --- END OF NEW BLOCK 4 ---
 
-# --- REQUIREMENT 1: DYNAMIC CHECKLIST DEFINITIONS ---
-# A nested dictionary to hold checklists: [WorkCenter][EquipmentType]
+# Dynamic Sheet
 CHECKLIST_DEFINITIONS = {
     'Electrical': {
         'Motor': [
@@ -204,11 +199,11 @@ CHECKLIST_DEFINITIONS = {
     }
 }
 
-# Helper lists for form selectboxes
+
 ELEC_EQUIPMENT_TYPES = list(CHECKLIST_DEFINITIONS['Electrical'].keys())
 MECH_EQUIPMENT_TYPES = list(CHECKLIST_DEFINITIONS['Mechanical'].keys())
 INST_EQUIPMENT_TYPES = list(CHECKLIST_DEFINITIONS['Instrument'].keys())
-# --- END REQUIREMENT 1 ---
+
 
 
 # Initialize session state
@@ -221,8 +216,6 @@ def initialize_session_state():
         st.session_state.current_page = "login"
 
 # Firebase Data Functions
-
-# --- NEW BLOCK 5: Function to get next Work Order # (Request 1) ---
 def get_next_work_order_number():
     """
     Atomically increments and returns a new work order number.
@@ -255,7 +248,7 @@ def get_next_work_order_number():
     except Exception as e:
         st.error(f"Error generating work order number: {e}", icon="❌")
         return None
-# --- END OF NEW BLOCK 5 ---
+
 
 
 def get_all_tasks():
@@ -301,8 +294,7 @@ def get_tasks_by_filters(filters=None):
             task_data = task.to_dict()
             task_data['id'] = task.id
             task_list.append(task_data)
-        
-        # Apply additional Python-based filters
+        #Python filter
         if filters:
             if 'location_type' in filters and filters['location_type']:
                 if isinstance(filters['location_type'], list):
@@ -324,7 +316,7 @@ def get_tasks_by_filters(filters=None):
         st.error(f"Error fetching tasks: {e}", icon="❌")
         return []
 
-# --- MODIFIED BLOCK 1: add_task (Request 1: Add WO Number & Metadata) ---
+# Add WO Numbe
 def add_task(task_data):
     """
     Add task to Firebase with all metadata (WO Number, User, Timestamp).
@@ -340,23 +332,23 @@ def add_task(task_data):
             st.error("Failed to generate Work Order Number.", icon="❌")
             return False, None
         
-        # 2. Add all metadata to the task_data
+        #Add data to the task_data
         task_data['work_order_number'] = wo_number
         task_data['submitted_by'] = st.session_state.user_data.get('username', 'unknown')
         task_data['submitted_by_name'] = st.session_state.user_data['name']
         task_data['submission_date'] = datetime.now().isoformat()
         task_data['status'] = 'pending'
         
-        # 3. Save to Firebase
+        # Save to Firebase
         tasks_ref = db.collection(TASKS_COLLECTION)
         tasks_ref.add(task_data)
         
-        # 4. Return success and the new WO number
+        # Return success and the new WO number
         return True, wo_number 
     except Exception as e:
         st.error(f"Error adding task: {e}", icon="❌")
         return False, None
-# --- END OF MODIFIED BLOCK 1 ---
+
 
 def update_task_status(task_id, status, feedback="", reviewed_by=""):
     """Update task status in Firebase and create notification if rejected"""
@@ -366,7 +358,7 @@ def update_task_status(task_id, status, feedback="", reviewed_by=""):
     try:
         task_ref = db.collection(TASKS_COLLECTION).document(task_id)
         
-        # First, get the task to find out who submitted it
+        #designated person submit form
         task_doc = task_ref.get()
         if not task_doc.exists:
             st.error("Task not found.", icon="❌")
@@ -384,7 +376,7 @@ def update_task_status(task_id, status, feedback="", reviewed_by=""):
         # Update the task
         task_ref.update(update_data)
         
-        # --- Create a notification if the task is rejected ---
+        # notification if the task is rejected 
         if status == 'rejected' and feedback:
             submitted_by_username = task_data.get('submitted_by')
             if submitted_by_username:
@@ -404,9 +396,7 @@ def update_task_status(task_id, status, feedback="", reviewed_by=""):
         st.error(f"Error updating task: {e}", icon="❌")
         return False
 
-# --- Notification and Compliance Functions ---
 
-# --- CORRECTION 1: Fix notification query ---
 def get_unread_notifications(username):
     """Get all unread notifications for a user"""
     if not db:
@@ -414,9 +404,7 @@ def get_unread_notifications(username):
         return []
     try:
         notif_ref = db.collection(NOTIFICATIONS_COLLECTION)
-        # 
-        # THE FIX IS HERE: Use firestore.Query.DESCENDING
-        #
+        
         query = notif_ref.where('username', '==', username).where('read', '==', False).order_by('timestamp', direction=firestore.Query.DESCENDING)
         notifications = query.stream()
         return [{'id': notif.id, **notif.to_dict()} for notif in notifications]
@@ -449,7 +437,7 @@ def save_compliance_report(report_data):
         st.error(f"Error saving compliance report: {e}", icon="❌")
         return False
 
-# --- CORRECTION 2: Fix compliance query ---
+# compliance location
 def get_compliance_reports(location):
     """Get all compliance reports for a specific location"""
     if not db:
@@ -457,9 +445,7 @@ def get_compliance_reports(location):
         return []
     try:
         reports_ref = db.collection(COMPLIANCE_COLLECTION)
-        # 
-        # THE FIX IS HERE: Use firestore.Query.DESCENDING
-        #
+        
         query = reports_ref.where('location', '==', location).order_by('report_date', direction=firestore.Query.DESCENDING)
         reports = query.stream()
         return [{'id': report.id, **report.to_dict()} for report in reports]
@@ -467,26 +453,19 @@ def get_compliance_reports(location):
         st.error(f"Error fetching compliance reports: {e}", icon="❌")
         return []
 
-# --- MODIFIED BLOCK 2: PDF Generation Functions (NEW) ---
+# PDF Generation Functions 
 
 class PDF(FPDF):
     """Custom PDF class with header and footer"""
     def header(self):
-        # Set font
         self.set_font('Arial', 'B', 14)
-        # Title
         self.cell(0, 10, 'Work Order Maintenance Report', 0, 1, 'C')
-        # Line break
         self.ln(5)
 
     def footer(self):
-        # Position at 1.5 cm from bottom
         self.set_y(-15)
-        # Set font
         self.set_font('Arial', 'I', 8)
-        # Page number
         page_num = f'Page {self.page_no()}/{{nb}}'
-        # Report generation time
         gen_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         self.cell(0, 10, page_num, 0, 0, 'L')
@@ -496,7 +475,6 @@ def safe_text(text):
     """Helper to clean text for FPDF latin-1 encoding"""
     if text is None:
         return "N/A"
-    # Encode to latin-1, replacing unsupported characters, then decode back
     return str(text).encode('latin-1', 'replace').decode('latin-1')
 
 def generate_task_pdf(task_data):
@@ -509,7 +487,7 @@ def generate_task_pdf(task_data):
     
     line_height = 7 # Define a standard line height
     
-    # --- Helper function for metadata rows ---
+    #Helper function for metadata rows 
     def add_dual_row(l1, v1, l2, v2):
         pdf.set_font('Arial', 'B', 10)
         pdf.cell(40, line_height, safe_text(l1), 1, 0)
@@ -521,7 +499,6 @@ def generate_task_pdf(task_data):
         pdf.set_font('Arial', '', 10)
         pdf.cell(55, line_height, safe_text(v2), 1, 1) # ln=1 for new line
     
-    # --- Section 1: Metadata ---
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(0, 10, '1. Work Order Details', 0, 1, 'L')
     
@@ -542,14 +519,14 @@ def generate_task_pdf(task_data):
     pdf.set_font('Arial', '', 10)
     pdf.cell(150, line_height, safe_text(task_data.get('work_type')), 1, 1)
 
-    # --- Section 2: Findings ---
+    # Findings ---
     pdf.ln(5) # Add space
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(0, 10, '2. Overall Findings / Summary', 0, 1, 'L')
     pdf.set_font('Arial', '', 10)
     pdf.multi_cell(190, line_height - 2, safe_text(task_data.get('overall_findings', 'N/A')), 1, 1)
     
-    # --- Section 3: Safety ---
+    #  Safety ---
     pdf.ln(5)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(0, 10, '3. Safety Checks Performed', 0, 1, 'L')
@@ -564,7 +541,7 @@ def generate_task_pdf(task_data):
             safety_text += f"- {safe_text(check)}\n"
         pdf.multi_cell(190, line_height - 2, safety_text, 1, 1)
 
-    # --- Section 4: Checklist ---
+    # Checklist ---
     pdf.ln(5)
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(0, 10, '4. PPM Checklist Results', 0, 1, 'L')
@@ -590,45 +567,36 @@ def generate_task_pdf(task_data):
             status = safe_text(item.get('status', 'N/A'))
             remarks = safe_text(item.get('remarks', 'N/A'))
             
-            # This method calculates the height needed for each cell and ensures
-            # all cells in the row stretch to the height of the tallest one.
-            
             # Get Y position before drawing row
             y_start = pdf.get_y()
             
-            # --- Draw cells ---
-            # Cell 1: Task
+            # Cell Task
             pdf.multi_cell(col_width_task, line_height - 2, task_desc, 1, 'L')
             y1 = pdf.get_y() # Get Y after drawing
             
             # Reset X,Y for Cell 2
             pdf.set_xy(pdf.get_x() + col_width_task, y_start)
             
-            # Cell 2: Status
+            # Cell Status
             pdf.multi_cell(col_width_status, line_height - 2, status, 1, 'C')
             y2 = pdf.get_y() # Get Y after drawing
             
             # Reset X,Y for Cell 3
             pdf.set_xy(pdf.get_x() + col_width_task + col_width_status, y_start)
             
-            # Cell 3: Remarks
+            # Cell Remarks
             pdf.multi_cell(col_width_remarks, line_height - 2, remarks, 1, 'L')
             y3 = pdf.get_y() # Get Y after drawing
 
-            # --- Set cursor to the bottom of the tallest cell ---
+            # Set cursor to the bottom of the tallest cell 
             max_y = max(y1, y2, y3)
             pdf.set_y(max_y)
 
     # Output the PDF as bytes
-    # FIX: Encode the string output to bytes, as required by st.download_button
     return pdf.output().encode('latin-1')
 
-# --- REMOVED get_pdf_preview_link FUNCTION ---
 
-# --- END OF MODIFIED BLOCK 2 ---
-
-
-# --- User Profile Functions ---
+# User Profile Functions 
 def update_user_profile_details(username, name, email):
     """Update user's name and email in Firebase"""
     if not db:
@@ -658,9 +626,7 @@ def update_user_password(username, old_password, new_password):
             
         user_data = user_doc.to_dict()
         
-        # WARNING: This is comparing plaintext passwords.
-        # This is highly insecure and for demo purposes only.
-        # A real system MUST hash and salt passwords.
+        # comparing plaintext passwords.
         if user_data.get('password') == old_password:
             user_ref.update({'password': new_password})
             return True, "Password updated successfully!"
@@ -704,11 +670,10 @@ def calculate_kpis(tasks):
     approval_rate = (approved_tasks / completed_tasks * 100) if completed_tasks > 0 else 0
     
 
-    # --- Corrected Avg Completion Time Calculation ---
+    #Avg Completion Time Calculation
     completion_times = []
     for task in tasks:
         if task['status'] in ['approved', 'rejected']:
-            # This relies on 'estimated_duration' field existing in the task data
             duration = task.get('estimated_duration')
             if isinstance(duration, (int, float)):
                 completion_times.append(duration)
@@ -794,10 +759,11 @@ def predict_kpi_trend(tasks, days=30):
             trend_poly = np.polyfit(x, y, 1)
             trend = trend_poly[0] # The slope
         except np.linalg.LinAlgError:
-            trend = 0 # Handle singular matrix error if data is flat
+            trend = 0 
+            # Handle singular matrix error if data is flat
 
-        
-        predicted_rate = current_rate + (trend * 7) # Predict 7 days out
+        # Predict 7 days out
+        predicted_rate = current_rate + (trend * 7) 
         predicted_rate = max(0, min(100, predicted_rate))
         
         # Achievement probability
@@ -821,7 +787,7 @@ def predict_kpi_trend(tasks, days=30):
         'historical_data': []
     }
 
-# --- NEW BLOCK 6: Helper Function for Findings Analysis (Request 2) ---
+# Helper Function for Findings Analysis 
 def analyze_findings_text(findings_list):
     """Processes a list of finding strings and returns a Counter of common words."""
     all_text = ' '.join(findings_list).lower()
@@ -838,10 +804,9 @@ def analyze_findings_text(findings_list):
     ]
     
     return Counter(filtered_words).most_common(20)
-# --- END OF NEW BLOCK 6 ---
 
 
-# --- NEW HELPER FUNCTION (from user request): RENDER CHECKLIST ---
+# RENDER CHECKLIST ---
 def render_checklist(checklist_definitions, work_center_key):
     """
     Renders a checklist with PASS/FAIL/NA and Remarks for each item.
@@ -875,7 +840,6 @@ def render_checklist(checklist_definitions, work_center_key):
                 st.markdown(f"{item_description}")
             
             with col2:
-                # Unique key for each radio button
                 status_key = f"{work_center_key}_status_{i}"
                 status = st.radio(
                     "Status", 
@@ -886,7 +850,6 @@ def render_checklist(checklist_definitions, work_center_key):
                 )
             
             with col3:
-                # Unique key for each text input
                 remarks_key = f"{work_center_key}_remarks_{i}"
                 remarks = st.text_input(
                     "Remarks", 
@@ -901,41 +864,35 @@ def render_checklist(checklist_definitions, work_center_key):
                 "remarks": remarks
             })
             
-            # Add a divider line
             if i < len(checklist_definitions) - 1:
                 st.markdown("---")
 
     return checklist_data
-# --- END OF NEW HELPER FUNCTION ---
 
 
-# --- MODIFIED BLOCK 3: electrical_form (DYNAMIC CHECKLIST + AUTO DURATION) ---
+#  electrical_form=
 def electrical_form():
     st.subheader("🔌 Electrical Work Order (PPM)")
-    
-    # --- FIX: Move Equipment Selection OUTSIDE the form ---
-    # This widget will now trigger a script rerun when changed.
     selected_equipment = st.selectbox(
         "Select Equipment Type*", 
         ELEC_EQUIPMENT_TYPES, 
         key="elec_equip_type",
         help="Select an equipment type to load the correct checklist below."
     )
-    # --- END OF FIX ---
+
     
     with st.form("electrical_form", clear_on_submit=True):
         
         st.subheader("1. Work Order Details")
         
-        # --- Metadata ---
         col1, col2 = st.columns(2)
         with col1:
             specific_location = st.selectbox("Specific Location*", ALL_LOCATIONS, key="elec_loc")
             area = st.text_input("Area/Unit*", key="elec_area")
             priority = st.selectbox("Priority*", ["Low", "Medium", "High"], key="elec_priority")
             
-            # --- REQUIREMENT 1: Dynamic Equipment Selection (MOVED OUTSIDE) ---
-            # We add a disabled text input just to show the user what they selected
+            # Dynamic Equipment Selection 
+            # disabled text input to show the user what they selected
             st.text_input("Selected Equipment Type", value=selected_equipment, disabled=True)
             
         with col2:
@@ -943,23 +900,21 @@ def electrical_form():
             st.text_input("Location Type", value=location_type, disabled=True, help="Auto-detected based on Specific Location.")
             equipment_tag = st.text_input("Equipment Name/Tag*", key="elec_equip_tag", placeholder="e.g., MTR-101A")
 
-            # --- REQUIREMENT 2: Auto-Duration ---
+            #  Auto-Duration 
             work_type = st.selectbox("Select Work Type*", ELEC_WORK_TYPES, key="elec_work_type")
             estimated_duration = ELECTRICAL_DURATIONS.get(work_type, ELECTRICAL_DURATIONS["Default"])
             st.text_input("Estimated Duration (hours)", value=f"{estimated_duration}", disabled=True, help="Auto-calculated based on Work Type.")
-            # --- End Requirement 2 ---
+          
             
         
-        # --- REQUIREMENT 1: Call Dynamic Checklist Renderer ---
+        # Call Dynamic Checklist Renderer 
         st.markdown("---")
-        # The 'selected_equipment' var is now set from *outside* the form
-        # So the correct checklist is loaded *before* the form is rendered
         checklist_to_render = CHECKLIST_DEFINITIONS['Electrical'].get(selected_equipment, CHECKLIST_DEFINITIONS['Electrical']['Default'])
         checklist_results = render_checklist(checklist_to_render, "elec")
-        # --- End Requirement 1 ---
+     
         
         
-        # --- Overall Findings / Safety ---
+        #  Overall Findings Safety 
         st.markdown("---")
         st.subheader("3. Summary & Safety")
         
@@ -973,7 +928,7 @@ def electrical_form():
         submitted = st.form_submit_button("Submit Electrical Work Order")
         
         if submitted:
-            # Updated validation
+            # validation
             if all([specific_location, equipment_tag, area, selected_equipment, work_type]):
                 task_data = {
                     'work_center': 'Electrical',
@@ -999,34 +954,31 @@ def electrical_form():
                     st.error("Error submitting work order", icon="❌")
             else:
                 st.error("Please fill in all required fields (*): Location, Area, Equipment Name/Tag, and Work Type.", icon="❌")
-# --- END OF MODIFIED BLOCK 3 ---
 
 
-# --- MODIFIED BLOCK 4: mechanical_form (DYNAMIC CHECKLIST + AUTO DURATION) ---
+# mechanical_form 
 def mechanical_form():
     st.subheader("⚙️ Mechanical Work Order (PPM)")
     
-    # --- FIX: Move Equipment Selection OUTSIDE the form ---
+
     selected_equipment = st.selectbox(
         "Select Equipment Type*", 
         MECH_EQUIPMENT_TYPES, 
         key="mech_equip_type",
         help="Select an equipment type to load the correct checklist below."
     )
-    # --- END OF FIX ---
+
     
     with st.form("mechanical_form", clear_on_submit=True):
         
         st.subheader("1. Work Order Details")
         
-        # --- Metadata ---
+ 
         col1, col2 = st.columns(2)
         with col1:
             specific_location = st.selectbox("Specific Location*", ALL_LOCATIONS, key="mech_loc")
             area = st.text_input("Area/Unit*", key="mech_area")
             priority = st.selectbox("Priority*", ["Low", "Medium", "High"], key="mech_priority")
-            
-            # --- REQUIREMENT 1: Dynamic Equipment Selection (MOVED) ---
             st.text_input("Selected Equipment Type", value=selected_equipment, disabled=True)
             
         with col2:
@@ -1034,21 +986,21 @@ def mechanical_form():
             st.text_input("Location Type", value=location_type, disabled=True, help="Auto-detected based on Specific Location.")
             equipment_tag = st.text_input("Equipment Name/Tag*", key="mech_equip_tag", placeholder="e.g., P-101A")
 
-            # --- REQUIREMENT 2: Auto-Duration ---
+           
             work_type = st.selectbox("Select Work Type*", MECH_WORK_TYPES, key="mech_work_type")
             estimated_duration = MECHANICAL_DURATIONS.get(work_type, MECHANICAL_DURATIONS["Default"])
             st.text_input("Estimated Duration (hours)", value=f"{estimated_duration}", disabled=True, help="Auto-calculated based on Work Type.")
-            # --- End Requirement 2 ---
         
         
-        # --- REQUIREMENT 1: Call Dynamic Checklist Renderer ---
+        
+        # Dynamic Checklist Renderer
         st.markdown("---")
         checklist_to_render = CHECKLIST_DEFINITIONS['Mechanical'].get(selected_equipment, CHECKLIST_DEFINITIONS['Mechanical']['Default'])
         checklist_results = render_checklist(checklist_to_render, "mech")
-        # --- End Requirement 1 ---
+      
         
         
-        # --- Overall Findings / Safety ---
+        # Overall Findings / Safety 
         st.markdown("---")
         st.subheader("3. Summary & Safety")
         
@@ -1069,8 +1021,8 @@ def mechanical_form():
                     'specific_location': specific_location,
                     'area': area,
                     'equipment_name': equipment_tag,      # The specific tag
-                    'equipment_type': selected_equipment, # The category (Pump, etc)
-                    'work_type': work_type,               # The work type (PM, CM, etc)
+                    'equipment_type': selected_equipment, 
+                    'work_type': work_type,              
                     'priority': priority,
                     'estimated_duration': estimated_duration,
                     'checklist_data': checklist_results,
@@ -1087,21 +1039,21 @@ def mechanical_form():
                     st.error("Error submitting work order", icon="❌")
             else:
                 st.error("Please fill in all required fields (*): Location, Area, Equipment Name/Tag, and Work Type.", icon="❌")
-# --- END OF MODIFIED BLOCK 4 ---
 
 
-# --- MODIFIED BLOCK 5: instrument_form (DYNAMIC CHECKLIST + AUTO DURATION) ---
+
+# instrument_form 
 def instrument_form():
     st.subheader("📡 Instrument Work Order (PPM)")
     
-    # --- FIX: Move Equipment Selection OUTSIDE the form ---
+ 
     selected_equipment = st.selectbox(
         "Select Equipment Type*", 
         INST_EQUIPMENT_TYPES, 
         key="inst_equip_type",
         help="Select an equipment type to load the correct checklist below."
     )
-    # --- END OF FIX ---
+
     
     with st.form("instrument_form", clear_on_submit=True):
         
