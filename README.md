@@ -70,7 +70,7 @@ Because this app uses a secure database, you need a private key to access it. **
 
 
 
-## 🔑 Login Credentials (For Testing)
+## Login Credentials (For Testing)
 
 Use the following accounts to test the Role-Based Access Control (RBAC):
 
