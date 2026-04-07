@@ -17,7 +17,7 @@ Follow these steps to run the application locally on your machine.
 ### 1. Prerequisites
 Ensure you have the following installed:
 * [Python 3.8 or higher](https://www.python.org/downloads/)
-* [VS Code](https://code.visualstudio.com/) (Recommended IDE)
+* [VS Code](https://code.visualstudio.com/) 
 
 ### 2. Installation
 
